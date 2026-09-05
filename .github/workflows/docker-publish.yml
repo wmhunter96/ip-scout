@@ -21,9 +21,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -49,8 +46,16 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=,format=short,enable=${{ github.ref_type != 'tag' }}
 
-      # Multi-arch so ip-scout also runs on Raspberry Pi / other arm64
-      # Unraid or homelab boxes, not just amd64.
+      # amd64 only for now: the linux/arm64 leg of this build (cross-compiled
+      # under QEMU emulation via docker/setup-qemu-action) hung indefinitely
+      # on the "Build and push" step in practice instead of failing outright,
+      # rather than the apt-get/pip steps themselves being slow -- dropped
+      # QEMU and arm64 to unblock amd64 (all Unraid boxes, which is the only
+      # target that actually matters right now) rather than debug a wedged
+      # GitHub-hosted runner. Re-add `docker/setup-qemu-action@v3` above and
+      # `linux/arm64` to platforms below if arm64 support is needed later --
+      # just budget for it hanging again and worth confirming it completes
+      # before relying on it.
       - name: Build and push
         uses: docker/build-push-action@v6
         env:
@@ -63,7 +68,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
