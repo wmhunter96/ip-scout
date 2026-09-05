@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 # resolves, "Nmap scan report for somehost.lan (192.168.4.12)".
 _NMAP_HOST_RE = re.compile(r"Nmap scan report for (?:\S+ \()?(\d{1,3}(?:\.\d{1,3}){3})\)?")
 
+# With -v (only added when tracking progress -- see
+# _scan_with_nmap_tracking_progress), nmap also emits a report line for
+# hosts that did NOT respond, as e.g. "Nmap scan report for 192.168.4.2
+# [host down]" -- same "Nmap scan report for" prefix _NMAP_HOST_RE looks
+# for, so it has to be excluded explicitly or every scanned address in the
+# range ends up counted as live.
+_NMAP_HOST_DOWN_MARKER = "[host down]"
+
 # nmap's own "About X% done" progress line, emitted periodically by
 # `-v --stats-every` (only requested when a caller wants progress).
 _NMAP_STATS_RE = re.compile(r"About ([\d.]+)% done")
@@ -35,6 +43,20 @@ ProgressCallback = Callable[[float, str], None]
 
 def nmap_available() -> bool:
     return shutil.which("nmap") is not None
+
+
+def _parse_up_hosts(nmap_output: str) -> set[str]:
+    """Extract only genuinely-up hosts from nmap -sn output, line by line --
+    see _NMAP_HOST_DOWN_MARKER for why this can't just be a blind regex
+    findall over the whole output."""
+    found: set[str] = set()
+    for line in nmap_output.splitlines():
+        if _NMAP_HOST_DOWN_MARKER in line:
+            continue
+        match = _NMAP_HOST_RE.search(line)
+        if match:
+            found.add(match.group(1))
+    return found
 
 
 def scan_with_nmap(
@@ -54,7 +76,7 @@ def scan_with_nmap(
             timeout=timeout,
             check=False,
         )
-        return set(_NMAP_HOST_RE.findall(proc.stdout))
+        return _parse_up_hosts(proc.stdout)
     return _scan_with_nmap_tracking_progress(target, timeout, on_progress)
 
 
@@ -90,7 +112,7 @@ def _scan_with_nmap_tracking_progress(
             proc.kill()
             proc.wait()
     on_progress(1.0, "nmap scan complete")
-    return set(_NMAP_HOST_RE.findall("".join(lines)))
+    return _parse_up_hosts("".join(lines))
 
 
 def _ping_once(ip: str, timeout_s: float = _PING_TIMEOUT_S) -> str | None:

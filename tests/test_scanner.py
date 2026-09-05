@@ -199,6 +199,43 @@ def test_scan_with_nmap_caps_parsed_progress_below_done(monkeypatch):
     assert updates[-1] == (1.0, "nmap scan complete")
 
 
+def test_scan_with_nmap_progress_path_ignores_verbose_host_down_lines(monkeypatch):
+    """Regression test: the progress-tracking path adds -v to get periodic
+    stats, but -v also makes nmap print a report line for hosts that did
+    NOT respond -- "Nmap scan report for 192.168.4.2 [host down]" -- which
+    matches the same "Nmap scan report for" prefix as a genuinely-up host.
+    Every scanned address in the range was ending up counted as used."""
+    fake_output_lines = [
+        "Nmap scan report for 192.168.4.1\n",
+        "Host is up, received arp-response (0.0010s latency).\n",
+        "Nmap scan report for 192.168.4.2 [host down]\n",
+        "Nmap scan report for 192.168.4.3 [host down]\n",
+        "Nmap scan report for 192.168.4.4\n",
+        "Host is up, received arp-response (0.0020s latency).\n",
+        "Nmap done: 4 IP addresses (2 hosts up) scanned in 1.00 seconds\n",
+    ]
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = iter(fake_output_lines)
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(scanner.subprocess, "Popen", lambda *a, **k: FakeProcess())
+
+    result = scanner.scan_with_nmap("192.168.4", 1, 4, on_progress=lambda f, d: None)
+
+    assert result == {"192.168.4.1", "192.168.4.4"}
+
+
 def test_scan_subnet_falls_back_to_ping_when_nmap_errors(monkeypatch):
     monkeypatch.setattr(scanner, "nmap_available", lambda: True)
 
