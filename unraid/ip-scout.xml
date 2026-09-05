@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/wmhunter96/ip-scout/issues</Support>
   <Project>https://github.com/wmhunter96/ip-scout</Project>
-  <Overview>ip-scout shows which IPs are in use on your LAN/subnet -- Docker containers (read via the Docker SDK against /var/run/docker.sock) plus anything else alive on the wire (nmap, falling back to a ping sweep) -- and reports the next free IP available. Runs as a small background server with a built-in dashboard, plus a GET /api/status JSON endpoint for an external dashboard widget (e.g. Homarr's Custom API widget) -- either way, no need for SSH access every time. Needs NET_ADMIN (added below) for the raw sockets nmap/ping require -- see the README's "Network access" section for the tradeoffs.</Overview>
+  <Overview>ip-scout shows which IPs are in use on your LAN/subnet -- Docker containers (read via `docker ps`/`docker inspect` against /var/run/docker.sock) plus anything else alive on the wire (nmap, falling back to a ping sweep) -- and reports the next free IP available. Runs as a small background server with a built-in dashboard, plus a GET /api/status JSON endpoint for an external dashboard widget (e.g. Homarr's Custom API widget) -- either way, no need for SSH access every time. Needs NET_ADMIN (added below) for the raw sockets nmap/ping require -- see the README's "Network access" section for the tradeoffs.</Overview>
   <Category>Tools: Network:</Category>
   <WebUI>http://[IP]:[PORT:8000]/</WebUI>
   <TemplateURL/>

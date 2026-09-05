@@ -1,1 +1,2 @@
-docker>=7.1,<8
+# No runtime dependencies: ip-scout uses only the standard library plus
+# the `docker` and `nmap`/`ping` CLIs on PATH (see docker/Dockerfile).

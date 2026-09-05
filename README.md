@@ -7,7 +7,7 @@
 
 A self-hosted network utility that answers one question: **which IPs are already taken on this subnet, and what's the next one free?**
 
-It cross-references two sources — Docker containers (via the Docker SDK, no shelling out to the CLI) and a live scan of the wire (nmap, falling back to a parallel ping sweep) — and reports both the full picture and the single next free address. Runs once and prints a table/JSON, or sits in the background as a tiny HTTP server with its own built-in dashboard, plus a JSON endpoint for a dashboard widget to poll.
+It cross-references two sources — Docker containers (via the `docker` CLI against the mounted socket) and a live scan of the wire (nmap, falling back to a parallel ping sweep) — and reports both the full picture and the single next free address. Runs once and prints a table/JSON, or sits in the background as a tiny HTTP server with its own built-in dashboard, plus a JSON endpoint for a dashboard widget to poll.
 
 ---
 
@@ -29,7 +29,7 @@ It cross-references two sources — Docker containers (via the Docker SDK, no sh
 
 Every home network eventually needs a static IP assigned to something new — a container, a Pi, a switch — and answering "what's actually free?" usually means either guessing, or SSHing in to run `docker ps` and `nmap` by hand. ip-scout automates exactly that check:
 
-1. **Ask Docker** which containers are running and what IPs it assigned them (via the `docker` Python SDK against `/var/run/docker.sock` — never `docker inspect` shelled out).
+1. **Ask Docker** which containers are running and what IPs it assigned them — literally `docker ps` + `docker inspect` against `/var/run/docker.sock`, the same two commands you'd run by hand, just batched into one `docker inspect` call across every running container.
 2. **Scan the wire** for anything else answering in a configurable range (`nmap -sn`, or a parallelized ping sweep if nmap isn't available).
 3. **Cross-reference** the two into one used-IP set, and report every free address in range plus the single next one.
 
@@ -37,7 +37,7 @@ No database, no setup wizard, no state — it re-scans fresh every time it's ask
 
 ## Features
 
-- 🐳 **Docker container inventory** — every running container's name and assigned IP(s), read via the Docker SDK
+- 🐳 **Docker container inventory** — every running container's name and assigned IP(s), read via the `docker` CLI against the mounted socket
 - 📡 **Live subnet scan** — `nmap -sn` when available, automatic fallback to a parallel ping sweep when it isn't
 - 🔀 **Cross-referenced report** — containers + live hosts deduplicated into one used-IP list, full free-IP list, and the single next free address
 - 🖥️ **CLI mode** — run once, get a table (or `--json` for scripting) and exit
@@ -176,7 +176,7 @@ SUBNET_PREFIX=192.168.4 PYTHONPATH=src python -m ipscout --json   # one-shot JSO
 SUBNET_PREFIX=192.168.4 PYTHONPATH=src python -m ipscout serve    # long-running server on :8000
 ```
 
-Running outside a container needs a reachable Docker daemon (the SDK talks to whatever `DOCKER_HOST` / the default socket points at) and, for a real scan, the same raw-socket access described in [Network Access](#network-access) — on most desktop OSes that means running with elevated privileges, since there's no container capability to add.
+Running outside a container needs the `docker` CLI on PATH and a reachable daemon (whatever `DOCKER_HOST` / the default socket points at) and, for a real scan, the same raw-socket access described in [Network Access](#network-access) — on most desktop OSes that means running with elevated privileges, since there's no container capability to add.
 
 ### Tests
 
@@ -184,7 +184,7 @@ Running outside a container needs a reachable Docker daemon (the SDK talks to wh
 pytest -v
 ```
 
-Every test mocks the Docker SDK and any subprocess/network call — the suite needs no Docker daemon, no nmap/ping binary, and no real network access to run. Covers, among other things:
+Every test mocks the `docker`/`nmap`/`ping` subprocess calls — the suite needs no Docker daemon, no nmap/ping binary, and no real network access to run. Covers, among other things:
 
 - Free-IP computation and numeric IP sorting (`ipmath.py`)
 - Container → IP extraction, including host-networked containers with no IP (`docker_inspect.py`)
@@ -213,7 +213,7 @@ docker run --rm --cap-add=NET_ADMIN -p 8000:8000 \
 src/ipscout/
 ├── config.py          Config dataclass -- env vars, with CLI flag overrides layered on top
 ├── ipmath.py           Pure range math: generate a range, compute free IPs, sort/dedupe
-├── docker_inspect.py   Docker SDK -> list of ContainerInfo(name, short_id, networks, ips)
+├── docker_inspect.py   `docker ps`/`docker inspect` -> list of ContainerInfo(name, short_id, networks, ips)
 ├── scanner.py          nmap -sn, parsed; parallel ping-sweep fallback; picks whichever works
 ├── report.py           Cross-references docker_inspect + scanner into one report dict
 ├── cli.py              argparse: one-shot table/JSON, or dispatch to serve mode

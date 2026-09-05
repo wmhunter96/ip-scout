@@ -1,21 +1,38 @@
-"""Docker container -> IP address inspection, via the Docker SDK.
+"""Docker container -> IP address inspection, via the `docker` CLI.
 
-Deliberately uses the `docker` Python SDK against the daemon socket rather
-than shelling out to `docker inspect` -- no subprocess, no parsing CLI
-output, and it's trivial to mock in tests (see tests/test_docker_inspect.py).
+Deliberately shells out to `docker ps` + `docker inspect` against the
+mounted socket -- the exact two commands this project exists to automate,
+run by hand like this:
+
+    docker ps --format '{{.Names}}' | while read name; do
+      ip=$(docker inspect --format \
+        '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$name")
+      printf "%-25s %s\n" "$name" "$ip"
+    done
+
+Same two commands, but one `docker inspect` call for every running
+container instead of one per name (`docker inspect` happily takes many IDs
+at once), and JSON output instead of a Go template string so a container on
+more than one network doesn't get its IPs concatenated with no separator.
+
+This previously went through the `docker` Python SDK instead -- switched
+to the CLI because the SDK's own Engine API version negotiation was a
+source of exactly the kind of environment-specific breakage (works in dev,
+silently returns nothing on a real Unraid box) this project is supposed to
+replace with something that just works, the same way the hand-run commands
+above always have.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import subprocess
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-try:
-    import docker
-except ImportError:  # pragma: no cover - exercised only when the optional dep is missing
-    docker = None
+_DOCKER_TIMEOUT_S = 15
 
 
 @dataclass
@@ -26,24 +43,31 @@ class ContainerInfo:
     ips: list[str] = field(default_factory=list)
 
 
-def get_docker_client():
-    """Create a Docker SDK client from the environment (DOCKER_HOST, socket, etc.)."""
-    if docker is None:
-        raise RuntimeError(
-            "The 'docker' package is not installed; run `pip install docker`."
-        )
-    return docker.from_env()
+def _docker(*args: str) -> str:
+    proc = subprocess.run(
+        ["docker", *args],
+        capture_output=True,
+        text=True,
+        timeout=_DOCKER_TIMEOUT_S,
+        check=True,
+    )
+    return proc.stdout
 
 
-def _extract_ips(container) -> tuple[list[str], list[str]]:
-    """Pull network names + IPv4 addresses out of a container's NetworkSettings.
+def _running_container_ids() -> list[str]:
+    """Equivalent to `docker ps -q` -- by ID rather than name, so a rename
+    racing with this call can't cause an inspect miss."""
+    return [line for line in _docker("ps", "-q").splitlines() if line]
+
+
+def _extract_ips(networks: dict) -> tuple[list[str], list[str]]:
+    """Pull network names + IPv4 addresses out of a container's Networks dict.
 
     A container on host networking (or one still starting up) has no entry
-    with an IPAddress; that network still shows up in `networks`, just with
-    no matching IP -- callers should treat an empty `ips` list as "no IP
+    with an IPAddress; that network still shows up in `names`, just with no
+    matching IP -- callers should treat an empty `ips` list as "no IP
     Docker assigned it", not as "inspection failed".
     """
-    networks = container.attrs.get("NetworkSettings", {}).get("Networks", {}) or {}
     names: list[str] = []
     ips: list[str] = []
     for net_name, net_data in networks.items():
@@ -54,31 +78,28 @@ def _extract_ips(container) -> tuple[list[str], list[str]]:
     return names, ips
 
 
-def get_container_ips(client=None) -> list[ContainerInfo]:
-    """List running containers and the IPs Docker has assigned them.
+def get_container_ips() -> list[ContainerInfo]:
+    """List running containers and the IPs Docker has assigned them."""
+    ids = _running_container_ids()
+    if not ids:
+        return []
 
-    Pass an existing SDK client (e.g. a mock in tests, or a shared client in
-    serve mode) via `client`; otherwise one is created and closed here.
-    """
-    owns_client = client is None
-    if client is None:
-        client = get_docker_client()
-    try:
-        result = []
-        for container in client.containers.list():
-            networks, ips = _extract_ips(container)
-            result.append(
-                ContainerInfo(
-                    name=container.name,
-                    short_id=container.short_id,
-                    networks=networks,
-                    ips=ips,
-                )
+    # One `docker inspect` call covering every running container, not one
+    # per container -- `{{json .}}` prints one JSON object per line.
+    out = _docker("inspect", "--format", "{{json .}}", *ids)
+
+    result = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        data = json.loads(line)
+        networks, ips = _extract_ips(data.get("NetworkSettings", {}).get("Networks") or {})
+        result.append(
+            ContainerInfo(
+                name=data["Name"].lstrip("/"),
+                short_id=data["Id"][:12],
+                networks=networks,
+                ips=ips,
             )
-        return result
-    finally:
-        if owns_client:
-            try:
-                client.close()
-            except Exception:
-                logger.debug("Error closing Docker client", exc_info=True)
+        )
+    return result

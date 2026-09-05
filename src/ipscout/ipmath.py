@@ -1,4 +1,4 @@
-"""Pure IP-range math: no network calls, no Docker SDK, no subprocess.
+"""Pure IP-range math: no network calls, no Docker, no subprocess.
 
 Kept isolated from scanner.py / docker_inspect.py so the arithmetic that
 decides "what's free" can be unit tested without mocking a single external

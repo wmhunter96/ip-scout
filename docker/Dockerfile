@@ -1,4 +1,12 @@
 # syntax=docker/dockerfile:1
+
+# Just the `docker` CLI binary (statically linked, so it drops straight
+# into a glibc image with no library dependencies of its own) -- copied in
+# below instead of adding Docker's apt repo just for one file. ip-scout
+# shells out to it against the mounted socket rather than using the Docker
+# Python SDK, so there's no separate Engine API version to keep in sync.
+FROM docker:27-cli AS docker-cli
+
 FROM python:3.12-slim AS runtime
 
 # Baked in at build time (see .github/workflows/docker-publish.yml) purely
@@ -30,6 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         iputils-ping \
         curl \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 WORKDIR /app
 

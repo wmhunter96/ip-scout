@@ -15,8 +15,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Read-only: ip-scout only ever calls containers.list()/inspect, never
-      # start/stop/create.
+      # Read-only: ip-scout only ever runs `docker ps`/`docker inspect`
+      # against this socket, never start/stop/create.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - SUBNET_PREFIX=192.168.4

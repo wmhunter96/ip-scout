@@ -1,4 +1,4 @@
-"""Range math and free-IP logic -- no network access, no Docker SDK."""
+"""Range math and free-IP logic -- no network access, no Docker."""
 
 from __future__ import annotations
 

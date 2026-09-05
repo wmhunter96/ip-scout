@@ -17,7 +17,7 @@ def test_build_report_cross_references_containers_and_scan(monkeypatch):
     monkeypatch.setattr(
         report_module,
         "get_container_ips",
-        lambda client=None: [
+        lambda: [
             ContainerInfo(name="web", short_id="abc123", networks=["bridge"], ips=["192.168.4.2"]),
             ContainerInfo(name="hostnet", short_id="def456", networks=["host"], ips=[]),
         ],
@@ -48,7 +48,7 @@ def test_build_report_dedupes_container_ip_also_seen_by_scan(monkeypatch):
     monkeypatch.setattr(
         report_module,
         "get_container_ips",
-        lambda client=None: [
+        lambda: [
             ContainerInfo(name="web", short_id="abc123", networks=["bridge"], ips=["192.168.4.2"])
         ],
     )
@@ -68,7 +68,7 @@ def test_build_report_dedupes_container_ip_also_seen_by_scan(monkeypatch):
 def test_build_report_no_free_ips(monkeypatch):
     config = make_config(subnet_prefix="192.168.4", range_start=1, range_end=2)
 
-    monkeypatch.setattr(report_module, "get_container_ips", lambda client=None: [])
+    monkeypatch.setattr(report_module, "get_container_ips", lambda: [])
     monkeypatch.setattr(
         report_module,
         "scan_subnet",

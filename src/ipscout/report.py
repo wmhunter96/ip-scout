@@ -18,9 +18,9 @@ from .scanner import ProgressCallback, scan_subnet
 
 
 def build_report(
-    config: Config, docker_client=None, on_scan_progress: ProgressCallback | None = None
+    config: Config, on_scan_progress: ProgressCallback | None = None
 ) -> dict[str, Any]:
-    containers = get_container_ips(client=docker_client)
+    containers = get_container_ips()
     container_ips = {ip for c in containers for ip in c.ips}
 
     live_ips, scan_method = scan_subnet(

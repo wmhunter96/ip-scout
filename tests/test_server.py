@@ -204,7 +204,7 @@ def test_scan_loop_honors_rescan_requested_during_a_scan(monkeypatch):
     stop_event = threading.Event()
     rescan_event = threading.Event()
 
-    def fake_build_report(config, docker_client=None, on_scan_progress=None):
+    def fake_build_report(config, on_scan_progress=None):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
