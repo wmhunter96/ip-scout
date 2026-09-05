@@ -127,6 +127,8 @@
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--text); }
   tr:last-child td { border-bottom: none; }
   td.ips, td.networks { font-family: var(--mono); font-size: 13px; color: var(--accent); }
   .empty { color: var(--muted); font-style: italic; padding: 4px 0; }
@@ -278,19 +280,72 @@
       .join("");
   }
 
-  function renderContainers(container, containers) {
-    if (!containers || containers.length === 0) {
+  // Container table sorting: click a header to sort by it (toggling
+  // asc/desc on repeat clicks), defaulting to IP ascending. Sorting is
+  // done client-side against the last-received list so it doesn't need a
+  // fresh fetch, and survives the next auto-refresh since sortState persists.
+  let lastContainers = [];
+  let sortState = { key: "ip", dir: "asc" };
+
+  function ipParts(ip) {
+    if (!ip) return null;
+    const parts = ip.split(".").map(Number);
+    return parts.length === 4 && parts.every((n) => !Number.isNaN(n)) ? parts : null;
+  }
+
+  function compareIps(a, b, dir) {
+    const pa = ipParts(a);
+    const pb = ipParts(b);
+    // No IP (e.g. host networking) always sorts last, in either direction --
+    // applied before the asc/desc sign flip below rather than after, so
+    // reversing the sort never brings blanks to the top.
+    if (!pa && !pb) return 0;
+    if (!pa) return 1;
+    if (!pb) return -1;
+    const sign = dir === "asc" ? 1 : -1;
+    for (let i = 0; i < 4; i++) {
+      if (pa[i] !== pb[i]) return (pa[i] - pb[i]) * sign;
+    }
+    return 0;
+  }
+
+  function sortContainers(containers, key, dir) {
+    const sign = dir === "asc" ? 1 : -1;
+    return [...containers].sort((a, b) => {
+      if (key === "ip") return compareIps(a.ips && a.ips[0], b.ips && b.ips[0], dir);
+      if (key === "networks") {
+        return (a.networks || []).join(", ").localeCompare((b.networks || []).join(", ")) * sign;
+      }
+      return a.name.localeCompare(b.name) * sign;
+    });
+  }
+
+  function headerCell(key, label) {
+    const arrow = sortState.key !== key ? "" : sortState.dir === "asc" ? " ▲" : " ▼";
+    return `<th class="sortable" data-key="${key}">${escapeHtml(label)}${arrow}</th>`;
+  }
+
+  function renderContainersTable() {
+    const container = $("containers");
+    if (lastContainers.length === 0) {
       container.innerHTML = '<div class="empty">No running containers</div>';
       return;
     }
-    const rows = containers
+    const rows = sortContainers(lastContainers, sortState.key, sortState.dir)
       .map((c) => {
         const ips = c.ips && c.ips.length ? c.ips.join(", ") : "(none / host network)";
         const nets = (c.networks || []).join(", ") || "&mdash;";
         return `<tr><td>${escapeHtml(c.name)}</td><td class="networks">${escapeHtml(nets)}</td><td class="ips">${escapeHtml(ips)}</td></tr>`;
       })
       .join("");
-    container.innerHTML = `<table><thead><tr><th>Name</th><th>Networks</th><th>IPs</th></tr></thead><tbody>${rows}</tbody></table>`;
+    container.innerHTML =
+      `<table><thead><tr>${headerCell("name", "Name")}${headerCell("networks", "Network")}` +
+      `${headerCell("ip", "IP")}</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function renderContainers(containers) {
+    lastContainers = containers || [];
+    renderContainersTable();
   }
 
   async function refresh() {
@@ -325,7 +380,7 @@
       $("free-count").textContent =
         `${data.free_ip_count} free / ${data.used_ip_count} in use`;
 
-      renderContainers($("containers"), data.containers);
+      renderContainers(data.containers);
       renderChips($("used-ips"), data.used_ips, "used");
       renderChips($("free-ips"), data.free_ips, "free");
     } catch (err) {
@@ -336,6 +391,19 @@
   }
 
   $("scan-now").addEventListener("click", triggerScanNow);
+
+  // Event delegation: #containers' innerHTML gets replaced on every
+  // render, but the div itself persists, so one listener here survives
+  // across re-renders instead of needing to be re-attached each time.
+  $("containers").addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-key]");
+    if (!th) return;
+    const key = th.dataset.key;
+    sortState = sortState.key === key
+      ? { key, dir: sortState.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: "asc" };
+    renderContainersTable();
+  });
 
   refresh();
   setInterval(refresh, REFRESH_MS);
