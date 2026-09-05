@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>ip-scout</Name>
+  <Repository>ghcr.io/wmhunter96/ip-scout:latest</Repository>
+  <Registry>https://ghcr.io/wmhunter96/ip-scout</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/wmhunter96/ip-scout/issues</Support>
+  <Project>https://github.com/wmhunter96/ip-scout</Project>
+  <Overview>ip-scout shows which IPs are in use on your LAN/subnet -- Docker containers (read via the Docker SDK against /var/run/docker.sock) plus anything else alive on the wire (nmap, falling back to a ping sweep) -- and reports the next free IP available. Runs as a small background server; poll GET /api/status from a dashboard widget (e.g. Homarr's Custom API widget) instead of needing SSH access every time. Needs NET_ADMIN (added below) for the raw sockets nmap/ping require -- see the README's "Network access" section for the tradeoffs.</Overview>
+  <Category>Tools: Network:</Category>
+  <WebUI>http://[IP]:[PORT:8000]/api/status</WebUI>
+  <TemplateURL/>
+  <!-- The ?v=N query param is a manual cache-buster: bump it any time
+       icon.png actually changes. Unraid caches the fetched icon keyed by
+       this exact URL string and won't notice a new commit on its own --
+       raw.githubusercontent.com itself updates immediately, this is purely
+       to force Unraid's local cache to refetch. -->
+  <Icon>https://raw.githubusercontent.com/wmhunter96/ip-scout/main/unraid/icon.png?v=1</Icon>
+  <ExtraParams>--cap-add=NET_ADMIN</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="API Port" Target="8000" Default="8000" Mode="tcp" Description="Port for the GET /api/status endpoint" Type="Port" Display="always" Required="true" Mask="false">8000</Config>
+  <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="ro" Description="Read-only access so ip-scout can list running containers and their IPs" Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="SUBNET_PREFIX" Target="SUBNET_PREFIX" Default="192.168.1" Mode="" Description="First three octets of the LAN to scan, e.g. 192.168.1" Type="Variable" Display="always" Required="true" Mask="false">192.168.1</Config>
+  <Config Name="RANGE_START" Target="RANGE_START" Default="1" Mode="" Description="First host octet to scan" Type="Variable" Display="always" Required="false" Mask="false">1</Config>
+  <Config Name="RANGE_END" Target="RANGE_END" Default="254" Mode="" Description="Last host octet to scan" Type="Variable" Display="always" Required="false" Mask="false">254</Config>
+  <Config Name="SCAN_INTERVAL" Target="SCAN_INTERVAL" Default="300" Mode="" Description="Seconds between background scans in serve mode" Type="Variable" Display="advanced" Required="false" Mask="false">300</Config>
+</Container>

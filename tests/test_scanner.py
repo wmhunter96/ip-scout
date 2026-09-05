@@ -1,0 +1,116 @@
+"""Live-host scanning, with subprocess/shutil fully mocked -- no real
+network access, and no dependency on nmap or ping actually being installed,
+is required to run this suite.
+"""
+
+from __future__ import annotations
+
+import subprocess
+
+from ipscout import scanner
+
+SAMPLE_NMAP_OUTPUT = """
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-09-04 12:00 UTC
+Nmap scan report for 192.168.4.1
+Host is up (0.00089s latency).
+Nmap scan report for router.lan (192.168.4.1)
+Nmap scan report for 192.168.4.10
+Host is up (0.0012s latency).
+Nmap done: 254 IP addresses (2 hosts up) scanned in 3.10 seconds
+"""
+
+
+def _fake_completed_process(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
+
+
+def test_nmap_available_true(monkeypatch):
+    monkeypatch.setattr(scanner.shutil, "which", lambda name: "/usr/bin/nmap")
+    assert scanner.nmap_available() is True
+
+
+def test_nmap_available_false(monkeypatch):
+    monkeypatch.setattr(scanner.shutil, "which", lambda name: None)
+    assert scanner.nmap_available() is False
+
+
+def test_scan_with_nmap_parses_ips(monkeypatch):
+    monkeypatch.setattr(
+        scanner.subprocess,
+        "run",
+        lambda *a, **k: _fake_completed_process(stdout=SAMPLE_NMAP_OUTPUT),
+    )
+    result = scanner.scan_with_nmap("192.168.4", 1, 254)
+    assert result == {"192.168.4.1", "192.168.4.10"}
+
+
+def test_scan_with_nmap_no_hosts_up(monkeypatch):
+    monkeypatch.setattr(
+        scanner.subprocess,
+        "run",
+        lambda *a, **k: _fake_completed_process(stdout="Nmap done: 0 hosts up\n"),
+    )
+    assert scanner.scan_with_nmap("192.168.4", 1, 254) == set()
+
+
+def test_ping_sweep_only_responding_ips_are_live(monkeypatch):
+    # Simulate .2 and .4 answering, everything else timing out.
+    def fake_run(cmd, **kwargs):
+        ip = cmd[-1]
+        returncode = 0 if ip in ("192.168.4.2", "192.168.4.4") else 1
+        return _fake_completed_process(returncode=returncode)
+
+    monkeypatch.setattr(scanner.subprocess, "run", fake_run)
+
+    result = scanner.scan_with_ping_sweep("192.168.4", 1, 5, max_workers=4)
+
+    assert result == {"192.168.4.2", "192.168.4.4"}
+
+
+def test_ping_sweep_handles_timeout_as_dead(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=1)
+
+    monkeypatch.setattr(scanner.subprocess, "run", fake_run)
+
+    result = scanner.scan_with_ping_sweep("192.168.4", 1, 3, max_workers=4)
+
+    assert result == set()
+
+
+def test_scan_subnet_uses_nmap_when_available(monkeypatch):
+    monkeypatch.setattr(scanner, "nmap_available", lambda: True)
+    monkeypatch.setattr(scanner, "scan_with_nmap", lambda *a, **k: {"192.168.4.1"})
+    monkeypatch.setattr(
+        scanner, "scan_with_ping_sweep", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+
+    ips, method = scanner.scan_subnet("192.168.4", 1, 254)
+
+    assert ips == {"192.168.4.1"}
+    assert method == "nmap"
+
+
+def test_scan_subnet_falls_back_to_ping_when_nmap_missing(monkeypatch):
+    monkeypatch.setattr(scanner, "nmap_available", lambda: False)
+    monkeypatch.setattr(scanner, "scan_with_ping_sweep", lambda *a, **k: {"192.168.4.2"})
+
+    ips, method = scanner.scan_subnet("192.168.4", 1, 254)
+
+    assert ips == {"192.168.4.2"}
+    assert method == "ping"
+
+
+def test_scan_subnet_falls_back_to_ping_when_nmap_errors(monkeypatch):
+    monkeypatch.setattr(scanner, "nmap_available", lambda: True)
+
+    def raise_error(*a, **k):
+        raise subprocess.SubprocessError("boom")
+
+    monkeypatch.setattr(scanner, "scan_with_nmap", raise_error)
+    monkeypatch.setattr(scanner, "scan_with_ping_sweep", lambda *a, **k: {"192.168.4.3"})
+
+    ips, method = scanner.scan_subnet("192.168.4", 1, 254)
+
+    assert ips == {"192.168.4.3"}
+    assert method == "ping"

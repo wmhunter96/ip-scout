@@ -1,0 +1,32 @@
+# Local build/dev convenience file. For a normal install, just pull the
+# published GHCR image (see README.md) -- `build:` here is only used when
+# you're changing ip-scout's own code.
+services:
+  ip-scout:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/wmhunter96/ip-scout:latest
+    container_name: ip-scout
+    # Needed for nmap/ping's raw ICMP sockets -- see "Network access" in
+    # the README for the tradeoffs vs. `network_mode: host`.
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8000:8000"
+    volumes:
+      # Read-only: ip-scout only ever calls containers.list()/inspect, never
+      # start/stop/create.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - SUBNET_PREFIX=192.168.4
+      - RANGE_START=1
+      - RANGE_END=254
+      - SCAN_INTERVAL=300
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
