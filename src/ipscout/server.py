@@ -1,11 +1,15 @@
-"""Serve mode: a tiny long-running HTTP server exposing GET /api/status.
+"""Serve mode: a tiny long-running HTTP server exposing GET /api/status plus
+a small built-in dashboard at GET /.
 
 Scans run on a background timer (every SCAN_INTERVAL seconds) instead of
 per-request, so a slow nmap/ping sweep never blocks a caller polling the
 endpoint (e.g. a Homarr Custom API widget) -- callers just get the most
 recently cached report. Deliberately built on stdlib http.server rather
-than a framework: this is a single read-only endpoint, and it keeps the
-image free of a web framework + ASGI server dependency chain.
+than a framework: these are two static/read-only responses, and it keeps
+the image free of a web framework + ASGI server dependency chain. The
+dashboard itself is a single static HTML file (static/index.html) that
+just polls /api/status client-side -- no templating, no separate frontend
+build step.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ import json
 import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 from .config import Config
@@ -22,6 +27,8 @@ from .report import build_report
 logger = logging.getLogger(__name__)
 
 _STATUS_PATHS = ("/api/status", "/api/status/")
+_INDEX_PATHS = ("/", "/index.html")
+_INDEX_HTML = (Path(__file__).parent / "static" / "index.html").read_bytes()
 
 
 class ScanCache:
@@ -62,11 +69,22 @@ def _make_handler(cache: ScanCache) -> type[BaseHTTPRequestHandler]:
             logger.info("%s - %s", self.address_string(), fmt % args)
 
         def do_GET(self) -> None:
-            if self.path not in _STATUS_PATHS:
+            if self.path in _INDEX_PATHS:
+                self._serve_index()
+            elif self.path in _STATUS_PATHS:
+                self._serve_status()
+            else:
                 self.send_response(404)
                 self.end_headers()
-                return
 
+        def _serve_index(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(_INDEX_HTML)))
+            self.end_headers()
+            self.wfile.write(_INDEX_HTML)
+
+        def _serve_status(self) -> None:
             report, error = cache.get()
             if report is None:
                 status_code = 503

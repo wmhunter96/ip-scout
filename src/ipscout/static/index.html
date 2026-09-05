@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ip-scout</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231e293b'/%3E%3Ccircle cx='8' cy='8' r='2.4' fill='none' stroke='%234ade80' stroke-width='1.4'/%3E%3Ccircle cx='3.5' cy='4' r='1.4' fill='%2338bdf8'/%3E%3Ccircle cx='12.5' cy='4' r='1.4' fill='%2338bdf8'/%3E%3Ccircle cx='3.5' cy='12' r='1.4' fill='%2338bdf8'/%3E%3Ccircle cx='12.5' cy='12' r='1.4' fill='%2338bdf8'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --free: #4ade80;
+    --error: #f87171;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 16px 48px;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h1 .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+  }
+  h1 .dot.live { background: var(--free); box-shadow: 0 0 0 3px rgba(74,222,128,.2); }
+  h1 .dot.err { background: var(--error); box-shadow: 0 0 0 3px rgba(248,113,113,.2); }
+  #meta { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  #meta span { font-family: var(--mono); }
+
+  .next-free {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .next-free .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+  .next-free .value { font-family: var(--mono); font-size: 28px; color: var(--free); font-weight: 600; }
+  .next-free .count { color: var(--muted); font-size: 13px; }
+
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  section h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+  tr:last-child td { border-bottom: none; }
+  td.ips, td.networks { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .empty { color: var(--muted); font-style: italic; padding: 4px 0; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, .12);
+    border: 1px solid var(--border);
+  }
+  .chip.used { color: var(--accent); }
+  .chip.free { color: var(--free); }
+
+  #error-banner {
+    display: none;
+    background: rgba(248, 113, 113, .12);
+    border: 1px solid var(--error);
+    color: var(--error);
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+  a { color: var(--accent); }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 32px; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1><span id="status-dot" class="dot"></span> ip-scout</h1>
+  <div id="meta">Loading&hellip;</div>
+
+  <div id="error-banner"></div>
+
+  <div class="next-free">
+    <div>
+      <div class="label">Next free IP</div>
+      <div class="value" id="next-free">&mdash;</div>
+    </div>
+    <div class="count" id="free-count"></div>
+  </div>
+
+  <section>
+    <h2>Containers</h2>
+    <div id="containers"></div>
+  </section>
+
+  <section>
+    <h2>In-use IPs</h2>
+    <div id="used-ips" class="chips"></div>
+  </section>
+
+  <section>
+    <h2>Free IPs</h2>
+    <div id="free-ips" class="chips"></div>
+  </section>
+
+  <footer>
+    Auto-refreshes every 15s &middot;
+    JSON at <a href="/api/status">/api/status</a> &middot;
+    <a href="https://github.com/wmhunter96/ip-scout" target="_blank" rel="noopener">ip-scout</a>
+  </footer>
+</main>
+
+<script>
+(function () {
+  const REFRESH_MS = 15000;
+  const $ = (id) => document.getElementById(id);
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
+
+  function renderChips(container, ips, cls) {
+    if (!ips || ips.length === 0) {
+      container.innerHTML = '<span class="empty">none</span>';
+      return;
+    }
+    container.innerHTML = ips
+      .map((ip) => `<span class="chip ${cls}">${escapeHtml(ip)}</span>`)
+      .join("");
+  }
+
+  function renderContainers(container, containers) {
+    if (!containers || containers.length === 0) {
+      container.innerHTML = '<div class="empty">No running containers</div>';
+      return;
+    }
+    const rows = containers
+      .map((c) => {
+        const ips = c.ips && c.ips.length ? c.ips.join(", ") : "(none / host network)";
+        const nets = (c.networks || []).join(", ") || "&mdash;";
+        return `<tr><td>${escapeHtml(c.name)}</td><td class="networks">${escapeHtml(nets)}</td><td class="ips">${escapeHtml(ips)}</td></tr>`;
+      })
+      .join("");
+    container.innerHTML = `<table><thead><tr><th>Name</th><th>Networks</th><th>IPs</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  async function refresh() {
+    const dot = $("status-dot");
+    const banner = $("error-banner");
+    try {
+      const res = await fetch("/api/status", { cache: "no-store" });
+      const data = await res.json();
+
+      if (res.status === 503) {
+        dot.className = "dot";
+        $("meta").textContent = "Waiting on the first scan to complete…";
+        return;
+      }
+
+      dot.className = data.last_scan_error ? "dot err" : "dot live";
+      banner.style.display = data.last_scan_error ? "block" : "none";
+      if (data.last_scan_error) {
+        banner.textContent = "Last scan failed, showing the most recent good result: " + data.last_scan_error;
+      }
+
+      $("meta").innerHTML =
+        `Range <span>${escapeHtml(data.range)}</span> &middot; ` +
+        `scan method <span>${escapeHtml(data.scan_method)}</span> &middot; ` +
+        `last scanned <span>${escapeHtml(new Date(data.scanned_at).toLocaleString())}</span>`;
+
+      $("next-free").textContent = data.next_free_ip || "none available";
+      $("free-count").textContent =
+        `${data.free_ip_count} free / ${data.used_ip_count} in use`;
+
+      renderContainers($("containers"), data.containers);
+      renderChips($("used-ips"), data.used_ips, "used");
+      renderChips($("free-ips"), data.free_ips, "free");
+    } catch (err) {
+      dot.className = "dot err";
+      banner.style.display = "block";
+      banner.textContent = "Couldn't reach /api/status: " + err;
+    }
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

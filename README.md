@@ -7,7 +7,7 @@
 
 A self-hosted network utility that answers one question: **which IPs are already taken on this subnet, and what's the next one free?**
 
-It cross-references two sources — Docker containers (via the Docker SDK, no shelling out to the CLI) and a live scan of the wire (nmap, falling back to a parallel ping sweep) — and reports both the full picture and the single next free address. Runs once and prints a table/JSON, or sits in the background as a tiny HTTP server for a dashboard widget to poll.
+It cross-references two sources — Docker containers (via the Docker SDK, no shelling out to the CLI) and a live scan of the wire (nmap, falling back to a parallel ping sweep) — and reports both the full picture and the single next free address. Runs once and prints a table/JSON, or sits in the background as a tiny HTTP server with its own built-in dashboard, plus a JSON endpoint for a dashboard widget to poll.
 
 ---
 
@@ -41,7 +41,7 @@ No database, no setup wizard, no state — it re-scans fresh every time it's ask
 - 📡 **Live subnet scan** — `nmap -sn` when available, automatic fallback to a parallel ping sweep when it isn't
 - 🔀 **Cross-referenced report** — containers + live hosts deduplicated into one used-IP list, full free-IP list, and the single next free address
 - 🖥️ **CLI mode** — run once, get a table (or `--json` for scripting) and exit
-- 🌐 **Serve mode** — a single `GET /api/status` endpoint (stdlib `http.server`, no framework) that re-scans on a timer and serves the cached result, so a dashboard widget (e.g. [Homarr](https://homarr.dev/)'s Custom API widget) can poll it without needing SSH access every time
+- 🌐 **Serve mode** — a small built-in dashboard at `/`, plus a `GET /api/status` JSON endpoint (stdlib `http.server`, no framework) for a dashboard widget (e.g. [Homarr](https://homarr.dev/)'s Custom API widget) to poll instead — both re-scan on a timer and serve the cached result, no need for SSH access every time
 - ⚙️ **Env var config with CLI overrides** — `SUBNET_PREFIX` / `RANGE_START` / `RANGE_END` / `SCAN_INTERVAL`, or the matching `--subnet-prefix` / `--range-start` / `--range-end` / `--interval` flags
 - 🪶 **Stateless** — no database, no volumes required; re-scans fresh every request/interval
 
@@ -60,7 +60,7 @@ docker run -d \
   ghcr.io/wmhunter96/ip-scout:latest
 ```
 
-Then poll it:
+Then open `http://localhost:8000` for the dashboard, or poll it as JSON:
 
 ```bash
 curl http://localhost:8000/api/status
@@ -109,7 +109,7 @@ docker run --rm \
 | --- | --- |
 | Repository | `ghcr.io/wmhunter96/ip-scout:latest` |
 | Icon URL | `https://raw.githubusercontent.com/wmhunter96/ip-scout/main/unraid/icon.png?v=1` |
-| WebUI Port | `8000` |
+| WebUI | `http://[IP]:[PORT:8000]/` (the dashboard; not just the port number — this is what makes the container's icon clickable) |
 | Path: Container | `/var/run/docker.sock` |
 | Path: Host | `/var/run/docker.sock` (read-only) |
 | Extra Parameters | `--cap-add=NET_ADMIN` |
@@ -121,7 +121,9 @@ One-time setup for a private GHCR image: on GitHub, go to the repo's **Packages*
 
 The Unraid template XML is included at [`unraid/ip-scout.xml`](unraid/ip-scout.xml).
 
-Once running, add a **Custom API** widget in Homarr (or similar) pointed at `http://<unraid-ip>:8000/api/status` to see the report on your dashboard.
+Once running, open `http://<unraid-ip>:8000` for the built-in dashboard, or add a **Custom API** widget in Homarr (or similar) pointed at `http://<unraid-ip>:8000/api/status` for the same report as JSON on your own dashboard.
+
+> **Container on a custom `br0`/macvlan network instead of bridge?** Unraid's host itself can't reach a container on a custom network by default — other devices on your LAN can hit its dashboard/API fine, but the Unraid host (and anything running in bridge mode on that same host) can't, unless you enable **Settings → Docker → Host access to custom networks**.
 
 ## Network Access
 
@@ -215,7 +217,8 @@ src/ipscout/
 ├── scanner.py          nmap -sn, parsed; parallel ping-sweep fallback; picks whichever works
 ├── report.py           Cross-references docker_inspect + scanner into one report dict
 ├── cli.py              argparse: one-shot table/JSON, or dispatch to serve mode
-└── server.py           stdlib http.server; background scan timer + cached GET /api/status
+├── server.py           stdlib http.server; background scan timer + cached GET / and /api/status
+└── static/index.html   The dashboard itself -- vanilla JS, polls /api/status client-side
 ```
 
 `report.build_report()` is the single function both entry points call — `cli.py` for a one-shot scan, `server.py` on a background timer — so the CLI and the HTTP endpoint can never drift into reporting different things for the same config. Nothing below it does I/O it doesn't need to: `ipmath.py` has no dependency on Docker, subprocess, or the network at all, which is what keeps the free-IP arithmetic testable without mocking anything.
