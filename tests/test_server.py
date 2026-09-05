@@ -96,7 +96,10 @@ def test_status_route_returns_cached_report(running_server):
     status, body, _ = _get(httpd, "/api/status")
 
     assert status == 200
-    assert json.loads(body) == {"next_free_ip": "192.168.4.5", "used_ips": []}
+    payload = json.loads(body)
+    assert payload["next_free_ip"] == "192.168.4.5"
+    assert payload["used_ips"] == []
+    assert payload["progress"] == {"scanning": False, "fraction": 0.0, "detail": ""}
 
 
 def test_status_route_includes_error_alongside_stale_report(running_server):
@@ -115,4 +118,75 @@ def test_status_route_includes_error_alongside_stale_report(running_server):
 def test_unknown_route_404s(running_server):
     httpd, _cache = running_server
     status, _body, _ = _get(httpd, "/nope")
+    assert status == 404
+
+
+def test_scan_cache_progress_starts_idle():
+    cache = ScanCache()
+    assert cache.get_progress() == {"scanning": False, "fraction": 0.0, "detail": ""}
+
+
+def test_scan_cache_tracks_progress_through_a_scan():
+    cache = ScanCache()
+
+    cache.start_scan()
+    assert cache.get_progress() == {"scanning": True, "fraction": 0.0, "detail": "starting scan"}
+
+    cache.update_progress(0.5, "128/254 hosts checked")
+    assert cache.get_progress() == {
+        "scanning": True,
+        "fraction": 0.5,
+        "detail": "128/254 hosts checked",
+    }
+
+    cache.finish_scan()
+    assert cache.get_progress() == {"scanning": False, "fraction": 1.0, "detail": ""}
+
+
+def _post(httpd, path):
+    conn = HTTPConnection(*httpd.server_address, timeout=5)
+    try:
+        conn.request("POST", path)
+        resp = conn.getresponse()
+        return resp.status, resp.read(), resp.getheader("Content-Type")
+    finally:
+        conn.close()
+
+
+def test_status_route_503_includes_progress_before_first_scan(running_server):
+    httpd, cache = running_server
+    cache.start_scan()
+    cache.update_progress(0.3, "76/254 hosts checked")
+
+    status, body, _ = _get(httpd, "/api/status")
+
+    assert status == 503
+    payload = json.loads(body)
+    assert payload["progress"] == {
+        "scanning": True,
+        "fraction": 0.3,
+        "detail": "76/254 hosts checked",
+    }
+
+
+def test_scan_now_route_sets_rescan_event():
+    cache = ScanCache()
+    rescan_event = threading.Event()
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(cache, rescan_event))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, body, content_type = _post(httpd, "/api/scan-now")
+        assert status == 202
+        assert "application/json" in content_type
+        assert json.loads(body)["status"] == "rescan requested"
+        assert rescan_event.is_set()
+    finally:
+        httpd.shutdown()
+        thread.join(timeout=5)
+
+
+def test_unknown_post_route_404s(running_server):
+    httpd, _cache = running_server
+    status, _body, _ = _post(httpd, "/nope")
     assert status == 404

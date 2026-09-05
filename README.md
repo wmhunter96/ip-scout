@@ -41,7 +41,7 @@ No database, no setup wizard, no state — it re-scans fresh every time it's ask
 - 📡 **Live subnet scan** — `nmap -sn` when available, automatic fallback to a parallel ping sweep when it isn't
 - 🔀 **Cross-referenced report** — containers + live hosts deduplicated into one used-IP list, full free-IP list, and the single next free address
 - 🖥️ **CLI mode** — run once, get a table (or `--json` for scripting) and exit
-- 🌐 **Serve mode** — a small built-in dashboard at `/`, plus a `GET /api/status` JSON endpoint (stdlib `http.server`, no framework) for a dashboard widget (e.g. [Homarr](https://homarr.dev/)'s Custom API widget) to poll instead — both re-scan on a timer and serve the cached result, no need for SSH access every time
+- 🌐 **Serve mode** — a small built-in dashboard at `/`, with a progress bar for the first scan and a "Scan now" button, plus a `GET /api/status` JSON endpoint (stdlib `http.server`, no framework) for a dashboard widget (e.g. [Homarr](https://homarr.dev/)'s Custom API widget) to poll instead — both re-scan on a timer (or on demand via `POST /api/scan-now`) and serve the cached result, no need for SSH access every time
 - ⚙️ **Env var config with CLI overrides** — `SUBNET_PREFIX` / `RANGE_START` / `RANGE_END` / `SCAN_INTERVAL`, or the matching `--subnet-prefix` / `--range-start` / `--range-end` / `--interval` flags
 - 🪶 **Stateless** — no database, no volumes required; re-scans fresh every request/interval
 
@@ -217,8 +217,8 @@ src/ipscout/
 ├── scanner.py          nmap -sn, parsed; parallel ping-sweep fallback; picks whichever works
 ├── report.py           Cross-references docker_inspect + scanner into one report dict
 ├── cli.py              argparse: one-shot table/JSON, or dispatch to serve mode
-├── server.py           stdlib http.server; background scan timer + cached GET / and /api/status
-└── static/index.html   The dashboard itself -- vanilla JS, polls /api/status client-side
+├── server.py           stdlib http.server; background scan timer + cached GET / and /api/status, POST /api/scan-now to trigger one early
+└── static/index.html   The dashboard itself -- vanilla JS, polls /api/status client-side, shows scan progress, has a "Scan now" button
 ```
 
 `report.build_report()` is the single function both entry points call — `cli.py` for a one-shot scan, `server.py` on a background timer — so the CLI and the HTTP endpoint can never drift into reporting different things for the same config. Nothing below it does I/O it doesn't need to: `ipmath.py` has no dependency on Docker, subprocess, or the network at all, which is what keeps the free-IP arithmetic testable without mocking anything.

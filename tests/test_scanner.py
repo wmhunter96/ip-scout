@@ -101,6 +101,67 @@ def test_scan_subnet_falls_back_to_ping_when_nmap_missing(monkeypatch):
     assert method == "ping"
 
 
+def test_ping_sweep_reports_progress_as_hosts_finish(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        ip = cmd[-1]
+        returncode = 0 if ip == "192.168.4.2" else 1
+        return _fake_completed_process(returncode=returncode)
+
+    monkeypatch.setattr(scanner.subprocess, "run", fake_run)
+
+    updates = []
+    scanner.scan_with_ping_sweep(
+        "192.168.4", 1, 5, max_workers=1, on_progress=lambda f, d: updates.append((f, d))
+    )
+
+    # Sequential (max_workers=1) so the order and final state are deterministic.
+    assert updates == [
+        (0.2, "1/5 hosts checked"),
+        (0.4, "2/5 hosts checked"),
+        (0.6, "3/5 hosts checked"),
+        (0.8, "4/5 hosts checked"),
+        (1.0, "5/5 hosts checked"),
+    ]
+
+
+def test_scan_with_nmap_streams_progress_and_still_parses_ips(monkeypatch):
+    fake_output_lines = [
+        "Starting Nmap 7.94 ( https://nmap.org ) at 2026-09-04 12:00 UTC\n",
+        "Stats: 0:00:02 elapsed; 0 hosts completed (0 up), 254 undergoing Ping Scan\n",
+        "Ping Scan Timing: About 40.00% done; ETC: 12:00 (0:00:03 remaining)\n",
+        "Nmap scan report for 192.168.4.1\n",
+        "Host is up (0.00089s latency).\n",
+        "Nmap scan report for 192.168.4.10\n",
+        "Host is up (0.0012s latency).\n",
+        "Nmap done: 254 IP addresses (2 hosts up) scanned in 3.10 seconds\n",
+    ]
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = iter(fake_output_lines)
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(scanner.subprocess, "Popen", lambda *a, **k: FakeProcess())
+
+    updates = []
+    result = scanner.scan_with_nmap(
+        "192.168.4", 1, 254, on_progress=lambda f, d: updates.append((f, d))
+    )
+
+    assert result == {"192.168.4.1", "192.168.4.10"}
+    assert (0.4, "scanning with nmap") in updates
+    assert updates[-1] == (1.0, "nmap scan complete")
+
+
 def test_scan_subnet_falls_back_to_ping_when_nmap_errors(monkeypatch):
     monkeypatch.setattr(scanner, "nmap_available", lambda: True)
 

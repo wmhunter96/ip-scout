@@ -23,7 +23,9 @@ def test_build_report_cross_references_containers_and_scan(monkeypatch):
         ],
     )
     monkeypatch.setattr(
-        report_module, "scan_subnet", lambda prefix, start, end: ({"192.168.4.4"}, "ping")
+        report_module,
+        "scan_subnet",
+        lambda prefix, start, end, on_progress=None: ({"192.168.4.4"}, "ping"),
     )
 
     result = report_module.build_report(config)
@@ -53,7 +55,7 @@ def test_build_report_dedupes_container_ip_also_seen_by_scan(monkeypatch):
     monkeypatch.setattr(
         report_module,
         "scan_subnet",
-        lambda prefix, start, end: ({"192.168.4.2", "192.168.4.3"}, "nmap"),
+        lambda prefix, start, end, on_progress=None: ({"192.168.4.2", "192.168.4.3"}, "nmap"),
     )
 
     result = report_module.build_report(config)
@@ -70,7 +72,7 @@ def test_build_report_no_free_ips(monkeypatch):
     monkeypatch.setattr(
         report_module,
         "scan_subnet",
-        lambda prefix, start, end: ({"192.168.4.1", "192.168.4.2"}, "ping"),
+        lambda prefix, start, end, on_progress=None: ({"192.168.4.1", "192.168.4.2"}, "ping"),
     )
 
     result = report_module.build_report(config)

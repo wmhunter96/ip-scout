@@ -41,8 +41,54 @@
   }
   h1 .dot.live { background: var(--free); box-shadow: 0 0 0 3px rgba(74,222,128,.2); }
   h1 .dot.err { background: var(--error); box-shadow: 0 0 0 3px rgba(248,113,113,.2); }
+
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  #scan-now {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: rgba(148, 163, 184, .12);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  #scan-now:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  #scan-now:disabled { opacity: .6; cursor: default; }
+
   #meta { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
   #meta span { font-family: var(--mono); }
+
+  .scan-progress { margin: 10px 0 24px; }
+  .scan-progress .track {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, .18);
+    overflow: hidden;
+  }
+  .scan-progress .fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+    width: 0%;
+    transition: width .3s ease;
+  }
+  .scan-progress.indeterminate .fill {
+    width: 30% !important;
+    animation: scan-indeterminate 1.2s ease-in-out infinite;
+  }
+  @keyframes scan-indeterminate {
+    0% { margin-left: -30%; }
+    100% { margin-left: 100%; }
+  }
+  .scan-progress .detail { color: var(--muted); font-size: 13px; margin-top: 6px; }
 
   .next-free {
     background: var(--panel);
@@ -112,8 +158,16 @@
 </head>
 <body>
 <main>
-  <h1><span id="status-dot" class="dot"></span> ip-scout</h1>
+  <div class="header-row">
+    <h1><span id="status-dot" class="dot"></span> ip-scout</h1>
+    <button id="scan-now" type="button">Scan now</button>
+  </div>
   <div id="meta">Loading&hellip;</div>
+
+  <div id="scan-progress" class="scan-progress" hidden>
+    <div class="track"><div class="fill" id="scan-progress-fill"></div></div>
+    <div class="detail" id="scan-progress-detail"></div>
+  </div>
 
   <div id="error-banner"></div>
 
@@ -150,7 +204,57 @@
 <script>
 (function () {
   const REFRESH_MS = 15000;
+  const FAST_REFRESH_MS = 1000;
+  const FAST_REFRESH_WINDOW_MS = 30000;
   const $ = (id) => document.getElementById(id);
+
+  let fastPollTimer = null;
+  let fastPollUntil = 0;
+
+  function renderProgress(progress) {
+    const wrap = $("scan-progress");
+    if (!progress || !progress.scanning) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    const fraction = typeof progress.fraction === "number" ? progress.fraction : 0;
+    // A freshly-started scan (fraction 0, e.g. nmap before its first stats
+    // tick) has no real percentage yet -- show motion instead of a stuck bar.
+    wrap.classList.toggle("indeterminate", fraction <= 0);
+    $("scan-progress-fill").style.width = `${Math.round(fraction * 100)}%`;
+    $("scan-progress-detail").textContent = progress.detail || "Scanning…";
+  }
+
+  function startFastPolling() {
+    fastPollUntil = Date.now() + FAST_REFRESH_WINDOW_MS;
+    if (fastPollTimer) return;
+    fastPollTimer = setInterval(() => {
+      if (Date.now() > fastPollUntil) {
+        clearInterval(fastPollTimer);
+        fastPollTimer = null;
+        return;
+      }
+      refresh();
+    }, FAST_REFRESH_MS);
+  }
+
+  async function triggerScanNow() {
+    const btn = $("scan-now");
+    btn.disabled = true;
+    btn.textContent = "Scanning…";
+    try {
+      await fetch("/api/scan-now", { method: "POST" });
+      await refresh();
+    } catch (err) {
+      // Swallow it here -- refresh()'s own error handling already surfaces
+      // connectivity problems via the error banner.
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Scan now";
+    }
+    startFastPolling();
+  }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => (
@@ -193,6 +297,8 @@
       if (res.status === 503) {
         dot.className = "dot";
         $("meta").textContent = "Waiting on the first scan to complete…";
+        renderProgress(data.progress);
+        if (data.progress && data.progress.scanning) startFastPolling();
         return;
       }
 
@@ -201,6 +307,8 @@
       if (data.last_scan_error) {
         banner.textContent = "Last scan failed, showing the most recent good result: " + data.last_scan_error;
       }
+      renderProgress(data.progress);
+      if (data.progress && data.progress.scanning) startFastPolling();
 
       $("meta").innerHTML =
         `Range <span>${escapeHtml(data.range)}</span> &middot; ` +
@@ -220,6 +328,8 @@
       banner.textContent = "Couldn't reach /api/status: " + err;
     }
   }
+
+  $("scan-now").addEventListener("click", triggerScanNow);
 
   refresh();
   setInterval(refresh, REFRESH_MS);

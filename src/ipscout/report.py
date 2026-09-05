@@ -14,15 +14,17 @@ from typing import Any
 from . import ipmath
 from .config import Config
 from .docker_inspect import get_container_ips
-from .scanner import scan_subnet
+from .scanner import ProgressCallback, scan_subnet
 
 
-def build_report(config: Config, docker_client=None) -> dict[str, Any]:
+def build_report(
+    config: Config, docker_client=None, on_scan_progress: ProgressCallback | None = None
+) -> dict[str, Any]:
     containers = get_container_ips(client=docker_client)
     container_ips = {ip for c in containers for ip in c.ips}
 
     live_ips, scan_method = scan_subnet(
-        config.subnet_prefix, config.range_start, config.range_end
+        config.subnet_prefix, config.range_start, config.range_end, on_progress=on_scan_progress
     )
 
     all_ips_in_range = ipmath.generate_range(
