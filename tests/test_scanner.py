@@ -162,6 +162,43 @@ def test_scan_with_nmap_streams_progress_and_still_parses_ips(monkeypatch):
     assert updates[-1] == (1.0, "nmap scan complete")
 
 
+def test_scan_with_nmap_caps_parsed_progress_below_done(monkeypatch):
+    """Regression test: nmap's own ETA is notoriously optimistic in the final
+    stretch and can report "About 100.00% done" for a while before the
+    process actually exits (a handful of slow/unresponsive hosts still being
+    retried) -- a mid-scan stats line must never be reported as fraction
+    1.0, or the dashboard shows a "finished" bar while still waiting."""
+    fake_output_lines = [
+        "Ping Scan Timing: About 100.00% done; ETC: 12:00 (0:00:00 remaining)\n",
+        "Nmap scan report for 192.168.4.1\n",
+        "Nmap done: 254 IP addresses (1 hosts up) scanned in 12.00 seconds\n",
+    ]
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = iter(fake_output_lines)
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(scanner.subprocess, "Popen", lambda *a, **k: FakeProcess())
+
+    updates = []
+    scanner.scan_with_nmap("192.168.4", 1, 254, on_progress=lambda f, d: updates.append((f, d)))
+
+    # Every update parsed *during* the scan must stay below 1.0; only the
+    # final, post-exit call is allowed to claim completion.
+    assert all(f < 1.0 for f, _d in updates[:-1])
+    assert updates[-1] == (1.0, "nmap scan complete")
+
+
 def test_scan_subnet_falls_back_to_ping_when_nmap_errors(monkeypatch):
     monkeypatch.setattr(scanner, "nmap_available", lambda: True)
 

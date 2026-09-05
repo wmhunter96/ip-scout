@@ -75,7 +75,12 @@ def _scan_with_nmap_tracking_progress(
             lines.append(line)
             match = _NMAP_STATS_RE.search(line)
             if match:
-                percent = min(float(match.group(1)), 100.0)
+                # nmap's own ETA is notoriously optimistic in the final
+                # stretch (a handful of slow/unresponsive hosts can sit at
+                # "About 99.x% done" for a while) -- cap what we report
+                # below 1.0 so the UI never claims "done" until the process
+                # has actually exited and on_progress(1.0, ...) below fires.
+                percent = min(float(match.group(1)), 99.0)
                 on_progress(percent / 100.0, "scanning with nmap")
             if time.monotonic() > deadline:
                 raise subprocess.TimeoutExpired(cmd, timeout)
