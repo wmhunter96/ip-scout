@@ -41,33 +41,56 @@ def sort_ips(ips: Iterable[str]) -> list[str]:
     return sorted(set(ips), key=lambda ip: ipaddress.IPv4Address(ip))
 
 
-def nearest_free_neighbors(
-    used_ips: Iterable[str], subnet_prefix: str, start: int, end: int
-) -> tuple[str | None, str | None]:
-    """The free IP directly below the lowest used address, and directly
-    above the highest, both within [start, end] under subnet_prefix.
-
-    E.g. used addresses clustered at .234-.251 in a 1-254 range gives
-    (.233, .252) -- the two addresses that would extend that block by one
-    on either side. This is deliberately not "the lowest free address
-    anywhere in the range" (that's what next_free_ip() is for): a static-IP
-    block is usually grown from its edges, not filled in from RANGE_START.
-
-    Either side is None when there's no room left (the used address at that
-    edge already sits at `start`/`end`), or both are None when nothing
-    used falls in [start, end] at all -- nothing to bracket.
-    """
+def _octets_in_range(ips: Iterable[str], subnet_prefix: str, start: int, end: int) -> set[int]:
     prefix_dot = f"{subnet_prefix}."
-    octets_in_range = [
+    return {
         int(ip[len(prefix_dot) :])
-        for ip in used_ips
+        for ip in ips
         if ip.startswith(prefix_dot) and start <= int(ip[len(prefix_dot) :]) <= end
-    ]
-    if not octets_in_range:
-        return None, None
+    }
 
-    below_octet = min(octets_in_range) - 1
-    above_octet = max(octets_in_range) + 1
-    below = f"{subnet_prefix}.{below_octet}" if below_octet >= start else None
-    above = f"{subnet_prefix}.{above_octet}" if above_octet <= end else None
+
+def nearest_free_neighbors(
+    container_ips: Iterable[str], used_ips: Iterable[str], subnet_prefix: str, start: int, end: int
+) -> tuple[str | None, str | None]:
+    """The free IP directly below the lowest *container* address, and
+    directly above the highest, walking outward past any other used
+    address (e.g. some unrelated live-scanned LAN device) until a
+    genuinely free one turns up or [start, end] runs out.
+
+    Anchored to `container_ips` specifically, not every address in
+    `used_ips` -- e.g. used addresses clustered at .234-.251 in a 1-254
+    range gives (.233, .252): the two addresses that would extend that
+    block by one on either side. A real LAN can easily have other used
+    addresses scattered well outside that block (a router at .1, IoT
+    devices, whatever else answered the live scan); those aren't where a
+    new container would actually go, so they shouldn't shift this
+    computation the way they would for `next_free_ip()` (the single
+    lowest free address anywhere in the whole range).
+
+    Either side is None when there's no free room left before `start`/`end`,
+    or both are None when there are no container addresses in [start, end]
+    at all -- nothing to bracket.
+    """
+    container_octets = _octets_in_range(container_ips, subnet_prefix, start, end)
+    if not container_octets:
+        return None, None
+    used_octets = _octets_in_range(used_ips, subnet_prefix, start, end)
+
+    below = None
+    octet = min(container_octets) - 1
+    while octet >= start:
+        if octet not in used_octets:
+            below = f"{subnet_prefix}.{octet}"
+            break
+        octet -= 1
+
+    above = None
+    octet = max(container_octets) + 1
+    while octet <= end:
+        if octet not in used_octets:
+            above = f"{subnet_prefix}.{octet}"
+            break
+        octet += 1
+
     return below, above

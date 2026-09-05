@@ -80,41 +80,66 @@ def test_sort_ips_dedupes():
 
 
 def test_nearest_free_neighbors_brackets_a_used_cluster():
-    used = [f"192.168.4.{i}" for i in range(234, 252)]  # .234-.251
-    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    containers = [f"192.168.4.{i}" for i in range(234, 252)]  # .234-.251
+    below, above = ipmath.nearest_free_neighbors(containers, containers, "192.168.4", 1, 254)
     assert below == "192.168.4.233"
     assert above == "192.168.4.252"
 
 
 def test_nearest_free_neighbors_single_used_ip():
-    below, above = ipmath.nearest_free_neighbors(["192.168.4.100"], "192.168.4", 1, 254)
+    containers = ["192.168.4.100"]
+    below, above = ipmath.nearest_free_neighbors(containers, containers, "192.168.4", 1, 254)
     assert below == "192.168.4.99"
     assert above == "192.168.4.101"
 
 
 def test_nearest_free_neighbors_no_room_below_at_range_start():
-    used = ["192.168.4.1", "192.168.4.50"]
-    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
-    assert below is None  # the lowest used IP already sits at range_start
+    containers = ["192.168.4.1", "192.168.4.50"]
+    below, above = ipmath.nearest_free_neighbors(containers, containers, "192.168.4", 1, 254)
+    assert below is None  # the lowest container IP already sits at range_start
     assert above == "192.168.4.51"
 
 
 def test_nearest_free_neighbors_no_room_above_at_range_end():
-    used = ["192.168.4.200", "192.168.4.254"]
-    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    containers = ["192.168.4.200", "192.168.4.254"]
+    below, above = ipmath.nearest_free_neighbors(containers, containers, "192.168.4", 1, 254)
     assert below == "192.168.4.199"
-    assert above is None  # the highest used IP already sits at range_end
+    assert above is None  # the highest container IP already sits at range_end
 
 
-def test_nearest_free_neighbors_nothing_used_in_range():
-    below, above = ipmath.nearest_free_neighbors([], "192.168.4", 1, 254)
+def test_nearest_free_neighbors_no_containers_in_range():
+    # Nothing to bracket even if other addresses happen to be used.
+    below, above = ipmath.nearest_free_neighbors([], ["192.168.4.50"], "192.168.4", 1, 254)
     assert (below, above) == (None, None)
 
 
-def test_nearest_free_neighbors_ignores_used_ips_outside_the_subnet_or_range():
+def test_nearest_free_neighbors_ignores_containers_outside_the_subnet_or_range():
     # A container on a different Docker network (172.17.x) and an address
     # outside [start, end] shouldn't affect the bracket at all.
-    used = ["172.17.0.2", "192.168.4.0", "192.168.4.234", "192.168.4.251"]
-    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    containers = ["172.17.0.2", "192.168.4.0", "192.168.4.234", "192.168.4.251"]
+    below, above = ipmath.nearest_free_neighbors(containers, containers, "192.168.4", 1, 254)
     assert below == "192.168.4.233"
     assert above == "192.168.4.252"
+
+
+def test_nearest_free_neighbors_ignores_unrelated_used_addresses_far_from_the_block():
+    # Regression test: scattered LAN devices detected by the live scan (a
+    # router, IoT gear, etc.) at addresses well below the container block
+    # must not shift the "below" answer down to bracket *them* instead --
+    # only the container block itself anchors the bracket.
+    containers = [f"192.168.4.{i}" for i in range(234, 252)]  # .234-.251
+    used = containers + ["192.168.4.1", "192.168.4.20", "192.168.4.66"]
+    below, above = ipmath.nearest_free_neighbors(containers, used, "192.168.4", 1, 254)
+    assert below == "192.168.4.233"
+    assert above == "192.168.4.252"
+
+
+def test_nearest_free_neighbors_walks_past_other_used_addresses_adjacent_to_the_block():
+    # If the address immediately outside the block is *also* used by
+    # something else, the answer should skip past it to the next genuinely
+    # free one, not just blindly report block_edge +/- 1 as "free".
+    containers = [f"192.168.4.{i}" for i in range(234, 252)]  # .234-.251
+    used = containers + ["192.168.4.233", "192.168.4.252"]
+    below, above = ipmath.nearest_free_neighbors(containers, used, "192.168.4", 1, 254)
+    assert below == "192.168.4.232"
+    assert above == "192.168.4.253"

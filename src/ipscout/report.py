@@ -33,7 +33,7 @@ def build_report(
     used_ips = ipmath.sort_ips(container_ips | live_ips)
     free_ips = ipmath.compute_free_ips(all_ips_in_range, used_ips)
     next_free_below, next_free_above = ipmath.nearest_free_neighbors(
-        used_ips, config.subnet_prefix, config.range_start, config.range_end
+        container_ips, used_ips, config.subnet_prefix, config.range_start, config.range_end
     )
 
     return {

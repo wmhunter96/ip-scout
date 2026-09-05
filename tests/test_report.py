@@ -37,20 +37,32 @@ def test_build_report_cross_references_containers_and_scan(monkeypatch):
     assert result["free_ips"] == ["192.168.4.1", "192.168.4.3", "192.168.4.5"]
     assert result["free_ip_count"] == 3
     assert result["next_free_ip"] == "192.168.4.1"
+    # Bracketed around the one container IP (.2) -- not the live scan's .4.
     assert result["next_free_below"] == "192.168.4.1"
-    assert result["next_free_above"] == "192.168.4.5"
+    assert result["next_free_above"] == "192.168.4.3"
     assert [c["name"] for c in result["containers"]] == ["web", "hostnet"]
 
 
-def test_build_report_brackets_a_used_cluster(monkeypatch):
-    # Mirrors a real-world layout: a clustered block of used addresses well
-    # inside the configured range, with plenty of free room on both sides.
+def test_build_report_brackets_the_container_block_not_scattered_live_hosts(monkeypatch):
+    # Mirrors the real-world bug this was written against: a clustered
+    # block of container IPs, plus other unrelated addresses the live scan
+    # finds elsewhere on the LAN (a router, IoT devices, ...) that must not
+    # shift the bracket away from the container block itself.
     config = make_config(subnet_prefix="192.168.4", range_start=1, range_end=254)
 
-    monkeypatch.setattr(report_module, "get_container_ips", lambda network_filter=None: [])
-    used = {f"192.168.4.{i}" for i in range(234, 252)}  # .234-.251
     monkeypatch.setattr(
-        report_module, "scan_subnet", lambda prefix, start, end, on_progress=None: (used, "nmap")
+        report_module,
+        "get_container_ips",
+        lambda network_filter=None: [
+            ContainerInfo(name=f"c{i}", short_id=str(i), networks=["br0"], ips=[f"192.168.4.{i}"])
+            for i in range(234, 252)  # .234-.251
+        ],
+    )
+    scattered = {"192.168.4.1", "192.168.4.20", "192.168.4.66"}
+    monkeypatch.setattr(
+        report_module,
+        "scan_subnet",
+        lambda prefix, start, end, on_progress=None: (scattered, "nmap"),
     )
 
     result = report_module.build_report(config)
