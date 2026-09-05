@@ -37,12 +37,12 @@ No database, no setup wizard, no state — it re-scans fresh every time it's ask
 
 ## Features
 
-- 🐳 **Docker container inventory** — every running container's name and assigned IP(s), read via the `docker` CLI against the mounted socket
+- 🐳 **Docker container inventory** — every running container's name and assigned IP(s), read via the `docker` CLI against the mounted socket; optionally restricted to one Docker network (`DOCKER_NETWORK`, e.g. `br0` for an Unraid macvlan setup) so containers on an unrelated network (typically the default bridge, `172.17.0.x`) don't get counted as "used" on your LAN subnet
 - 📡 **Live subnet scan** — `nmap -sn` when available, automatic fallback to a parallel ping sweep when it isn't
 - 🔀 **Cross-referenced report** — containers + live hosts deduplicated into one used-IP list, full free-IP list, and the nearest free address on either side of your used block (grows a static-IP cluster from its edges, rather than just naming the lowest free address anywhere in the range)
 - 🖥️ **CLI mode** — run once, get a table (or `--json` for scripting) and exit
 - 🌐 **Serve mode** — a small built-in dashboard at `/`, with a progress bar for the first scan and a "Scan now" button, plus a `GET /api/status` JSON endpoint (stdlib `http.server`, no framework) for a dashboard widget (e.g. [Homarr](https://homarr.dev/)'s Custom API widget) to poll instead — both re-scan on a timer (or on demand via `POST /api/scan-now`) and serve the cached result, no need for SSH access every time
-- ⚙️ **Env var config with CLI overrides** — `SUBNET_PREFIX` / `RANGE_START` / `RANGE_END` / `SCAN_INTERVAL`, or the matching `--subnet-prefix` / `--range-start` / `--range-end` / `--interval` flags
+- ⚙️ **Env var config with CLI overrides** — `SUBNET_PREFIX` / `RANGE_START` / `RANGE_END` / `SCAN_INTERVAL` / `DOCKER_NETWORK`, or the matching `--subnet-prefix` / `--range-start` / `--range-end` / `--interval` / `--docker-network` flags
 - 🪶 **Stateless** — no database, no volumes required; re-scans fresh every request/interval
 
 ## Docker Installation
@@ -81,6 +81,7 @@ docker compose up -d
 | Env `SUBNET_PREFIX` | First three octets, e.g. `192.168.4` |
 | Env `RANGE_START` / `RANGE_END` | Host-octet range to scan (default `1`–`254`) |
 | Env `SCAN_INTERVAL` | Seconds between background scans in serve mode (default `300`) |
+| Env `DOCKER_NETWORK` | Optional: only count containers on this Docker network, e.g. `br0` (default: every network) |
 
 To run a single scan and exit instead of the long-running server, override the container's default command:
 
@@ -108,7 +109,7 @@ docker run --rm \
 | Field | Value |
 | --- | --- |
 | Repository | `ghcr.io/wmhunter96/ip-scout:latest` |
-| Icon URL | `https://raw.githubusercontent.com/wmhunter96/ip-scout/main/unraid/icon.png?v=1` |
+| Icon URL | `https://raw.githubusercontent.com/wmhunter96/ip-scout/main/unraid/icon.png?v=2` |
 | WebUI | `http://[IP]:[PORT:8000]/` (the dashboard; not just the port number — this is what makes the container's icon clickable) |
 | Path: Container | `/var/run/docker.sock` |
 | Path: Host | `/var/run/docker.sock` (read-only) |
@@ -116,6 +117,7 @@ docker run --rm \
 | Variable: `SUBNET_PREFIX` | your LAN's first three octets, e.g. `192.168.4` |
 | Variable: `RANGE_START` / `RANGE_END` | scan range, default `1` / `254` |
 | Variable: `SCAN_INTERVAL` | seconds between scans, default `300` |
+| Variable: `DOCKER_NETWORK` | optional: only count containers on this Docker network, e.g. `br0` for a macvlan setup (blank = every network) |
 
 One-time setup for a private GHCR image: on GitHub, go to the repo's **Packages** tab → `ip-scout` package → **Package settings** → set visibility to **Public** (GHCR packages default to private, and a private image needs a login secret on the Unraid side to pull).
 

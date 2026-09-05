@@ -60,17 +60,27 @@ def _running_container_ids() -> list[str]:
     return [line for line in _docker("ps", "-q").splitlines() if line]
 
 
-def _extract_ips(networks: dict) -> tuple[list[str], list[str]]:
+def _extract_ips(
+    networks: dict, network_filter: str | None = None
+) -> tuple[list[str], list[str]]:
     """Pull network names + IPv4 addresses out of a container's Networks dict.
 
     A container on host networking (or one still starting up) has no entry
     with an IPAddress; that network still shows up in `names`, just with no
     matching IP -- callers should treat an empty `ips` list as "no IP
     Docker assigned it", not as "inspection failed".
+
+    With `network_filter` set (e.g. "br0" for an Unraid macvlan setup),
+    every other network the container is also on is left out entirely --
+    a container's default-bridge IP (typically 172.17.0.x) has nothing to
+    do with the LAN subnet ip-scout is tracking, so it shouldn't show up
+    as "networks"/"ips" alongside the one that actually matters.
     """
     names: list[str] = []
     ips: list[str] = []
     for net_name, net_data in networks.items():
+        if network_filter is not None and net_name != network_filter:
+            continue
         names.append(net_name)
         ip = (net_data or {}).get("IPAddress")
         if ip:
@@ -78,8 +88,13 @@ def _extract_ips(networks: dict) -> tuple[list[str], list[str]]:
     return names, ips
 
 
-def get_container_ips() -> list[ContainerInfo]:
-    """List running containers and the IPs Docker has assigned them."""
+def get_container_ips(network_filter: str | None = None) -> list[ContainerInfo]:
+    """List running containers and the IPs Docker has assigned them.
+
+    With `network_filter` set, containers not on that network at all are
+    dropped from the result entirely, not just filtered down to no IPs --
+    they have nothing relevant to report.
+    """
     ids = _running_container_ids()
     if not ids:
         return []
@@ -93,7 +108,10 @@ def get_container_ips() -> list[ContainerInfo]:
         if not line.strip():
             continue
         data = json.loads(line)
-        networks, ips = _extract_ips(data.get("NetworkSettings", {}).get("Networks") or {})
+        all_networks = data.get("NetworkSettings", {}).get("Networks") or {}
+        networks, ips = _extract_ips(all_networks, network_filter)
+        if network_filter is not None and not networks:
+            continue
         result.append(
             ContainerInfo(
                 name=data["Name"].lstrip("/"),

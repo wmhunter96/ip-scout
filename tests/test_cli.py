@@ -50,6 +50,21 @@ def test_cli_overrides_take_precedence_over_env(monkeypatch):
     assert captured["config"].range_end == 60
 
 
+def test_docker_network_flag_overrides_env(monkeypatch):
+    monkeypatch.delenv("DOCKER_NETWORK", raising=False)
+    captured = {}
+
+    def fake_build_report(config):
+        captured["config"] = config
+        return {"next_free_ip": None}
+
+    monkeypatch.setattr(cli, "build_report", fake_build_report)
+
+    cli.main(["--docker-network", "br0", "--json"])
+
+    assert captured["config"].docker_network == "br0"
+
+
 def test_build_report_failure_prints_message_and_exits_nonzero(monkeypatch, capsys):
     def fake_build_report(config):
         raise RuntimeError("cannot connect to Docker daemon")

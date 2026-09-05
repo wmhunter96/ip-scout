@@ -15,6 +15,7 @@ DEFAULT_RANGE_START = 1
 DEFAULT_RANGE_END = 254
 DEFAULT_SCAN_INTERVAL = 300
 DEFAULT_PORT = 8000
+DEFAULT_DOCKER_NETWORK = None
 
 
 @dataclass
@@ -24,6 +25,11 @@ class Config:
     range_end: int = DEFAULT_RANGE_END
     scan_interval: int = DEFAULT_SCAN_INTERVAL
     port: int = DEFAULT_PORT
+    # Only containers on this Docker network are considered at all (e.g.
+    # "br0" for an Unraid macvlan setup) -- None means every network.
+    # Containers on an unrelated network (typically the default bridge,
+    # 172.17.0.x) have nothing to do with the LAN subnet being tracked here.
+    docker_network: str | None = DEFAULT_DOCKER_NETWORK
 
     @classmethod
     def from_env(cls) -> Config:
@@ -33,6 +39,7 @@ class Config:
             range_end=int(os.environ.get("RANGE_END", DEFAULT_RANGE_END)),
             scan_interval=int(os.environ.get("SCAN_INTERVAL", DEFAULT_SCAN_INTERVAL)),
             port=int(os.environ.get("PORT", DEFAULT_PORT)),
+            docker_network=os.environ.get("DOCKER_NETWORK") or DEFAULT_DOCKER_NETWORK,
         )
 
     @property

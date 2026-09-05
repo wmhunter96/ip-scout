@@ -33,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--range-end", type=int, help="last host octet to scan (overrides RANGE_END)"
     )
     parser.add_argument(
+        "--docker-network",
+        help="only consider containers on this Docker network, e.g. br0 for an "
+        "Unraid macvlan setup (overrides DOCKER_NETWORK)",
+    )
+    parser.add_argument(
         "--json", action="store_true", help="print machine-readable JSON instead of a table"
     )
     parser.add_argument(
@@ -58,6 +63,8 @@ def _apply_overrides(config: Config, args: argparse.Namespace) -> Config:
         config.range_start = args.range_start
     if args.range_end is not None:
         config.range_end = args.range_end
+    if args.docker_network is not None:
+        config.docker_network = args.docker_network
     if getattr(args, "port", None) is not None:
         config.port = args.port
     if getattr(args, "interval", None) is not None:

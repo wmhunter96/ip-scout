@@ -23,6 +23,11 @@ services:
       - RANGE_START=1
       - RANGE_END=254
       - SCAN_INTERVAL=300
+      # Uncomment to only count containers on one Docker network (e.g. an
+      # Unraid macvlan setup) -- otherwise a container's default-bridge IP
+      # (typically 172.17.0.x) counts as "used" even though it's unrelated
+      # to the LAN subnet above.
+      # - DOCKER_NETWORK=br0
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/status"]

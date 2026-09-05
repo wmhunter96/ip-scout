@@ -102,6 +102,53 @@ def test_get_container_ips_short_id_is_truncated_to_twelve_chars(monkeypatch):
     assert info.short_id == full_id[:12]
 
 
+def test_get_container_ips_network_filter_drops_other_networks(monkeypatch):
+    # A container on both the default bridge and a macvlan network -- with
+    # a filter, only the matching network's name/IP should survive.
+    inspect_out = _container_json(
+        "multi",
+        "def456abc789",
+        {
+            "bridge": {"IPAddress": "172.17.0.3"},
+            "br0": {"IPAddress": "192.168.4.50"},
+        },
+    )
+    monkeypatch.setattr(
+        docker_inspect.subprocess, "run", _fake_docker("def456abc789\n", inspect_out + "\n")
+    )
+
+    [info] = get_container_ips(network_filter="br0")
+
+    assert info.networks == ["br0"]
+    assert info.ips == ["192.168.4.50"]
+
+
+def test_get_container_ips_network_filter_drops_containers_not_on_it_at_all(monkeypatch):
+    # A container with no presence on the filtered network shouldn't show
+    # up in the result at all, not just with empty networks/ips.
+    inspect_out = _container_json("web", "abc123def456", {"bridge": {"IPAddress": "172.17.0.2"}})
+    monkeypatch.setattr(
+        docker_inspect.subprocess, "run", _fake_docker("abc123def456\n", inspect_out + "\n")
+    )
+
+    assert get_container_ips(network_filter="br0") == []
+
+
+def test_get_container_ips_no_filter_keeps_every_network(monkeypatch):
+    inspect_out = _container_json(
+        "multi",
+        "def456abc789",
+        {"bridge": {"IPAddress": "172.17.0.3"}, "br0": {"IPAddress": "192.168.4.50"}},
+    )
+    monkeypatch.setattr(
+        docker_inspect.subprocess, "run", _fake_docker("def456abc789\n", inspect_out + "\n")
+    )
+
+    [info] = get_container_ips(network_filter=None)
+
+    assert set(info.networks) == {"bridge", "br0"}
+
+
 def test_get_container_ips_inspects_all_running_ids_in_one_call(monkeypatch):
     ids = ["id1", "id2"]
     inspect_out = "\n".join(

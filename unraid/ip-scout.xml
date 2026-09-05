@@ -32,4 +32,5 @@
   <Config Name="RANGE_START" Target="RANGE_START" Default="1" Mode="" Description="First host octet to scan" Type="Variable" Display="always" Required="false" Mask="false">1</Config>
   <Config Name="RANGE_END" Target="RANGE_END" Default="254" Mode="" Description="Last host octet to scan" Type="Variable" Display="always" Required="false" Mask="false">254</Config>
   <Config Name="SCAN_INTERVAL" Target="SCAN_INTERVAL" Default="300" Mode="" Description="Seconds between background scans in serve mode" Type="Variable" Display="advanced" Required="false" Mask="false">300</Config>
+  <Config Name="DOCKER_NETWORK" Target="DOCKER_NETWORK" Default="" Mode="" Description="Only count containers on this Docker network, e.g. br0 for a macvlan setup -- leave blank to count every network" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>

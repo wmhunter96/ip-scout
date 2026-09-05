@@ -6,7 +6,15 @@ from ipscout.config import Config
 
 
 def test_from_env_defaults_when_unset(monkeypatch):
-    for var in ("SUBNET_PREFIX", "RANGE_START", "RANGE_END", "SCAN_INTERVAL", "PORT"):
+    env_vars = (
+        "SUBNET_PREFIX",
+        "RANGE_START",
+        "RANGE_END",
+        "SCAN_INTERVAL",
+        "PORT",
+        "DOCKER_NETWORK",
+    )
+    for var in env_vars:
         monkeypatch.delenv(var, raising=False)
 
     config = Config.from_env()
@@ -16,6 +24,7 @@ def test_from_env_defaults_when_unset(monkeypatch):
     assert config.range_end == 254
     assert config.scan_interval == 300
     assert config.port == 8000
+    assert config.docker_network is None
 
 
 def test_from_env_reads_all_vars(monkeypatch):
@@ -24,6 +33,7 @@ def test_from_env_reads_all_vars(monkeypatch):
     monkeypatch.setenv("RANGE_END", "20")
     monkeypatch.setenv("SCAN_INTERVAL", "120")
     monkeypatch.setenv("PORT", "9000")
+    monkeypatch.setenv("DOCKER_NETWORK", "br0")
 
     config = Config.from_env()
 
@@ -32,6 +42,12 @@ def test_from_env_reads_all_vars(monkeypatch):
     assert config.range_end == 20
     assert config.scan_interval == 120
     assert config.port == 9000
+    assert config.docker_network == "br0"
+
+
+def test_from_env_treats_empty_docker_network_as_unset(monkeypatch):
+    monkeypatch.setenv("DOCKER_NETWORK", "")
+    assert Config.from_env().docker_network is None
 
 
 def test_range_label():
