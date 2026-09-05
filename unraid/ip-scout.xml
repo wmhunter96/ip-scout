@@ -18,7 +18,7 @@
        this exact URL string and won't notice a new commit on its own --
        raw.githubusercontent.com itself updates immediately, this is purely
        to force Unraid's local cache to refetch. -->
-  <Icon>https://raw.githubusercontent.com/wmhunter96/ip-scout/main/unraid/icon.png?v=1</Icon>
+  <Icon>https://raw.githubusercontent.com/wmhunter96/ip-scout/main/unraid/icon.png?v=2</Icon>
   <ExtraParams>--cap-add=NET_ADMIN</ExtraParams>
   <PostArgs/>
   <CPUset/>
