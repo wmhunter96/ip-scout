@@ -142,7 +142,6 @@
     background: rgba(148, 163, 184, .12);
     border: 1px solid var(--border);
   }
-  .chip.used { color: var(--accent); }
   .chip.free { color: var(--free); }
 
   #error-banner {
@@ -186,11 +185,6 @@
   <section>
     <h2>Containers</h2>
     <div id="containers"></div>
-  </section>
-
-  <section>
-    <h2>In-use IPs</h2>
-    <div id="used-ips" class="chips"></div>
   </section>
 
   <section>
@@ -381,7 +375,6 @@
         `${data.free_ip_count} free / ${data.used_ip_count} in use`;
 
       renderContainers(data.containers);
-      renderChips($("used-ips"), data.used_ips, "used");
       renderChips($("free-ips"), data.free_ips, "free");
     } catch (err) {
       dot.className = "dot err";
