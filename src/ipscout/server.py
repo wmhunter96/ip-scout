@@ -107,7 +107,13 @@ def _scan_loop(
             cache.set_error(str(exc))
         finally:
             cache.finish_scan()
-        rescan_event.clear()
+        if rescan_event.is_set():
+            # A "scan now" request came in while the scan above was already
+            # running -- honor it by looping straight back around instead of
+            # clearing it unconsumed and waiting out the rest of the interval
+            # (which, for a slow first scan, could be the full SCAN_INTERVAL).
+            rescan_event.clear()
+            continue
         _wait_for_rescan_or_interval(stop_event, rescan_event, config.scan_interval)
 
 

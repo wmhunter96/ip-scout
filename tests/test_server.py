@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 
 import pytest
+from conftest import make_config
 
-from ipscout.server import ScanCache, _make_handler
+from ipscout import server as server_module
+from ipscout.server import ScanCache, _make_handler, _scan_loop
 
 
 def test_scan_cache_starts_empty():
@@ -190,3 +193,35 @@ def test_unknown_post_route_404s(running_server):
     httpd, _cache = running_server
     status, _body, _ = _post(httpd, "/nope")
     assert status == 404
+
+
+def test_scan_loop_honors_rescan_requested_during_a_scan(monkeypatch):
+    """Regression test: clicking "Scan now" while a scan is already running
+    (e.g. a slow first scan) used to be silently dropped -- the loop cleared
+    the request unconsumed and waited out the rest of SCAN_INTERVAL instead
+    of running the requested scan right away."""
+    call_count = 0
+    stop_event = threading.Event()
+    rescan_event = threading.Event()
+
+    def fake_build_report(config, docker_client=None, on_scan_progress=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Simulate a "Scan now" click landing while this scan is running.
+            rescan_event.set()
+        else:
+            stop_event.set()
+        return {"scanned_at": "now"}
+
+    monkeypatch.setattr(server_module, "build_report", fake_build_report)
+
+    config = make_config(scan_interval=300)  # would hang the test if the bug regressed
+    cache = ScanCache()
+
+    start = time.monotonic()
+    _scan_loop(config, cache, stop_event, rescan_event)
+    elapsed = time.monotonic() - start
+
+    assert call_count == 2
+    assert elapsed < 5
