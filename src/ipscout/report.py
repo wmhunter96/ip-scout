@@ -32,6 +32,9 @@ def build_report(
     )
     used_ips = ipmath.sort_ips(container_ips | live_ips)
     free_ips = ipmath.compute_free_ips(all_ips_in_range, used_ips)
+    next_free_below, next_free_above = ipmath.nearest_free_neighbors(
+        used_ips, config.subnet_prefix, config.range_start, config.range_end
+    )
 
     return {
         "scanned_at": datetime.now(UTC).isoformat(),
@@ -44,6 +47,8 @@ def build_report(
         "free_ips": free_ips,
         "free_ip_count": len(free_ips),
         "next_free_ip": ipmath.next_free_ip(free_ips),
+        "next_free_below": next_free_below,
+        "next_free_above": next_free_above,
     }
 
 
@@ -74,5 +79,7 @@ def format_table(report: dict[str, Any]) -> str:
         + (", ".join(report["free_ips"]) or "(none free)"),
         "",
         f"Next free IP: {report['next_free_ip'] or '(none available)'}",
+        f"Next free below used block: {report.get('next_free_below') or '(none available)'}",
+        f"Next free above used block: {report.get('next_free_above') or '(none available)'}",
     ]
     return "\n".join(lines)

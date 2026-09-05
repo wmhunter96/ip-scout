@@ -77,3 +77,44 @@ def test_sort_ips_dedupes():
         "192.168.4.1",
         "192.168.4.2",
     ]
+
+
+def test_nearest_free_neighbors_brackets_a_used_cluster():
+    used = [f"192.168.4.{i}" for i in range(234, 252)]  # .234-.251
+    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    assert below == "192.168.4.233"
+    assert above == "192.168.4.252"
+
+
+def test_nearest_free_neighbors_single_used_ip():
+    below, above = ipmath.nearest_free_neighbors(["192.168.4.100"], "192.168.4", 1, 254)
+    assert below == "192.168.4.99"
+    assert above == "192.168.4.101"
+
+
+def test_nearest_free_neighbors_no_room_below_at_range_start():
+    used = ["192.168.4.1", "192.168.4.50"]
+    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    assert below is None  # the lowest used IP already sits at range_start
+    assert above == "192.168.4.51"
+
+
+def test_nearest_free_neighbors_no_room_above_at_range_end():
+    used = ["192.168.4.200", "192.168.4.254"]
+    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    assert below == "192.168.4.199"
+    assert above is None  # the highest used IP already sits at range_end
+
+
+def test_nearest_free_neighbors_nothing_used_in_range():
+    below, above = ipmath.nearest_free_neighbors([], "192.168.4", 1, 254)
+    assert (below, above) == (None, None)
+
+
+def test_nearest_free_neighbors_ignores_used_ips_outside_the_subnet_or_range():
+    # A container on a different Docker network (172.17.x) and an address
+    # outside [start, end] shouldn't affect the bracket at all.
+    used = ["172.17.0.2", "192.168.4.0", "192.168.4.234", "192.168.4.251"]
+    below, above = ipmath.nearest_free_neighbors(used, "192.168.4", 1, 254)
+    assert below == "192.168.4.233"
+    assert above == "192.168.4.252"

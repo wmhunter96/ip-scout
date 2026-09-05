@@ -102,11 +102,12 @@
     align-items: baseline;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 20px 8px;
   }
+  .next-free .slot { flex: 1 1 auto; min-width: 160px; }
   .next-free .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
-  .next-free .value { font-family: var(--mono); font-size: 28px; color: var(--free); font-weight: 600; }
-  .next-free .count { color: var(--muted); font-size: 13px; }
+  .next-free .value { font-family: var(--mono); font-size: 24px; color: var(--free); font-weight: 600; }
+  .next-free .count { color: var(--muted); font-size: 13px; flex: 0 0 auto; align-self: flex-end; }
 
   section {
     background: var(--panel);
@@ -175,9 +176,13 @@
   <div id="error-banner"></div>
 
   <div class="next-free">
-    <div>
-      <div class="label">Next free IP</div>
-      <div class="value" id="next-free">&mdash;</div>
+    <div class="slot">
+      <div class="label">Next free &darr; (below used)</div>
+      <div class="value" id="next-free-below">&mdash;</div>
+    </div>
+    <div class="slot">
+      <div class="label">Next free &uarr; (above used)</div>
+      <div class="value" id="next-free-above">&mdash;</div>
     </div>
     <div class="count" id="free-count"></div>
   </div>
@@ -370,7 +375,8 @@
         `scan method <span>${escapeHtml(data.scan_method)}</span> &middot; ` +
         `last scanned <span>${escapeHtml(new Date(data.scanned_at).toLocaleString())}</span>`;
 
-      $("next-free").textContent = data.next_free_ip || "none available";
+      $("next-free-below").textContent = data.next_free_below || "none available";
+      $("next-free-above").textContent = data.next_free_above || "none available";
       $("free-count").textContent =
         `${data.free_ip_count} free / ${data.used_ip_count} in use`;
 

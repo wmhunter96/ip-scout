@@ -37,7 +37,26 @@ def test_build_report_cross_references_containers_and_scan(monkeypatch):
     assert result["free_ips"] == ["192.168.4.1", "192.168.4.3", "192.168.4.5"]
     assert result["free_ip_count"] == 3
     assert result["next_free_ip"] == "192.168.4.1"
+    assert result["next_free_below"] == "192.168.4.1"
+    assert result["next_free_above"] == "192.168.4.5"
     assert [c["name"] for c in result["containers"]] == ["web", "hostnet"]
+
+
+def test_build_report_brackets_a_used_cluster(monkeypatch):
+    # Mirrors a real-world layout: a clustered block of used addresses well
+    # inside the configured range, with plenty of free room on both sides.
+    config = make_config(subnet_prefix="192.168.4", range_start=1, range_end=254)
+
+    monkeypatch.setattr(report_module, "get_container_ips", lambda: [])
+    used = {f"192.168.4.{i}" for i in range(234, 252)}  # .234-.251
+    monkeypatch.setattr(
+        report_module, "scan_subnet", lambda prefix, start, end, on_progress=None: (used, "nmap")
+    )
+
+    result = report_module.build_report(config)
+
+    assert result["next_free_below"] == "192.168.4.233"
+    assert result["next_free_above"] == "192.168.4.252"
 
 
 def test_build_report_dedupes_container_ip_also_seen_by_scan(monkeypatch):
@@ -95,6 +114,8 @@ def test_format_table_includes_key_fields():
         "free_ips": ["192.168.4.1", "192.168.4.3", "192.168.4.5"],
         "free_ip_count": 3,
         "next_free_ip": "192.168.4.1",
+        "next_free_below": "192.168.4.233",
+        "next_free_above": "192.168.4.252",
     }
 
     table = report_module.format_table(report)
@@ -103,6 +124,8 @@ def test_format_table_includes_key_fields():
     assert "web" in table and "192.168.4.2" in table
     assert "(none / host network)" in table
     assert "Next free IP: 192.168.4.1" in table
+    assert "Next free below used block: 192.168.4.233" in table
+    assert "Next free above used block: 192.168.4.252" in table
 
 
 def test_format_table_handles_no_containers_and_no_free_ips():

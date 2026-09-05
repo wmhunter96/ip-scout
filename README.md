@@ -7,7 +7,7 @@
 
 A self-hosted network utility that answers one question: **which IPs are already taken on this subnet, and what's the next one free?**
 
-It cross-references two sources — Docker containers (via the `docker` CLI against the mounted socket) and a live scan of the wire (nmap, falling back to a parallel ping sweep) — and reports both the full picture and the single next free address. Runs once and prints a table/JSON, or sits in the background as a tiny HTTP server with its own built-in dashboard, plus a JSON endpoint for a dashboard widget to poll.
+It cross-references two sources — Docker containers (via the `docker` CLI against the mounted socket) and a live scan of the wire (nmap, falling back to a parallel ping sweep) — and reports both the full picture and the free addresses right next to your existing used block. Runs once and prints a table/JSON, or sits in the background as a tiny HTTP server with its own built-in dashboard, plus a JSON endpoint for a dashboard widget to poll.
 
 ---
 
@@ -39,7 +39,7 @@ No database, no setup wizard, no state — it re-scans fresh every time it's ask
 
 - 🐳 **Docker container inventory** — every running container's name and assigned IP(s), read via the `docker` CLI against the mounted socket
 - 📡 **Live subnet scan** — `nmap -sn` when available, automatic fallback to a parallel ping sweep when it isn't
-- 🔀 **Cross-referenced report** — containers + live hosts deduplicated into one used-IP list, full free-IP list, and the single next free address
+- 🔀 **Cross-referenced report** — containers + live hosts deduplicated into one used-IP list, full free-IP list, and the nearest free address on either side of your used block (grows a static-IP cluster from its edges, rather than just naming the lowest free address anywhere in the range)
 - 🖥️ **CLI mode** — run once, get a table (or `--json` for scripting) and exit
 - 🌐 **Serve mode** — a small built-in dashboard at `/`, with a progress bar for the first scan and a "Scan now" button, plus a `GET /api/status` JSON endpoint (stdlib `http.server`, no framework) for a dashboard widget (e.g. [Homarr](https://homarr.dev/)'s Custom API widget) to poll instead — both re-scan on a timer (or on demand via `POST /api/scan-now`) and serve the cached result, no need for SSH access every time
 - ⚙️ **Env var config with CLI overrides** — `SUBNET_PREFIX` / `RANGE_START` / `RANGE_END` / `SCAN_INTERVAL`, or the matching `--subnet-prefix` / `--range-start` / `--range-end` / `--interval` flags
